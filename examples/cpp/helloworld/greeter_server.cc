@@ -21,8 +21,6 @@
 #include <string>
 
 #include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h>
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
 
 #ifdef BAZEL_BUILD
 #include "examples/protos/helloworld.grpc.pb.h"
@@ -37,6 +35,10 @@ using grpc::Status;
 using helloworld::HelloRequest;
 using helloworld::HelloReply;
 using helloworld::Greeter;
+using helloworld::ReadRequest;
+using helloworld::ReadReply;
+using helloworld::WriteRequest;
+using helloworld::WriteReply;
 
 // Logic and data behind the server's behavior.
 class GreeterServiceImpl final : public Greeter::Service {
@@ -46,14 +48,45 @@ class GreeterServiceImpl final : public Greeter::Service {
     reply->set_message(prefix + request->name());
     return Status::OK;
   }
+
+    Status ReadData(ServerContext* context,
+                    const ReadRequest* request,
+                    ReadReply* reply) override
+    {
+        std::cout << "Server received read request for " << request->numbytes() << " bytes of data" << std::endl;
+        char data[request->numbytes()];
+        memset(data, 68, request->numbytes());
+        reply->set_numbytes(request->numbytes());
+        reply->set_data(data, request->numbytes());
+        std::cout << "Server is sending reply with " << request->numbytes() << " bytes of 68" << std::endl;
+        return Status::OK;
+    }
+
+    Status WriteData(ServerContext* context,
+                     const WriteRequest* request,
+                     WriteReply* reply) override
+    {
+        std::cout << "Server received write request with " << request->numbytes() << " bytes of data; request->data().size() " << request->data().size() << std::endl;
+        const char *data = request->data().c_str();
+        std::cout << "first 4 bytes of write data received: " << data[0] << " " << data[1] << " " << data[2] << " " << data[3] << std::endl;
+        for (int i = 0; i < request->numbytes(); ++i)
+        {
+            if (data[i] != 69)
+            {
+                std::cout << "ERROR: Server detected write data != 69" << std::endl;
+                break;
+            }
+        }
+        reply->set_numbytes(request->numbytes());
+        std::cout << "Server sending write reply" << std::endl;
+        return Status::OK;
+    }
 };
 
 void RunServer() {
   std::string server_address("0.0.0.0:50051");
   GreeterServiceImpl service;
 
-  grpc::EnableDefaultHealthCheckService(true);
-  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
